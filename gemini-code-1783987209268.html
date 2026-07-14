@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Interactive Bingo Simulator</title>
+    <style>
+        :root {
+            --bg-color: #f4f7f6;
+            --card-bg: #ffffff;
+            --primary: #4CAF50;
+            --primary-hover: #45a049;
+            --border-radius: 12px;
+            --text-dark: #333;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            color: var(--text-dark);
+        }
+        header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: var(--card-bg);
+            border-radius: var(--border-radius);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+        }
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        input[type="number"], select, input[type="text"] {
+            padding: 8px 12px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        button:hover:not(:disabled) {
+            background-color: var(--primary-hover);
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .file-input-wrapper {
+            position: relative;
+            overflow: hidden;
+            display: inline-block;
+        }
+        .file-input-wrapper input[type=file] {
+            font-size: 100px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        /* Layout for Bingo Cards */
+        #board-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 25px;
+            padding: 10px 0;
+        }
+        .bingo-card-wrapper {
+            background: var(--card-bg);
+            padding: 15px;
+            border-radius: var(--border-radius);
+            box-shadow: 0 6px 12px rgba(0,0,0,0.08);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .card-title {
+            font-weight: bold;
+            font-size: 18px;
+            border: none;
+            border-bottom: 2px dashed #ccc;
+            background: transparent;
+            width: 150px;
+        }
+        .card-title:focus { outline: none; border-bottom-color: var(--primary); }
+        .card-settings {
+            display: flex;
+            gap: 10px;
+        }
+        .card-settings select { flex: 1; }
+        .header-buttons { display: flex; gap: 5px; }
+        .header-buttons button { padding: 6px 12px; font-size: 14px; }
+        
+        /* Bingo Grid */
+        .bingo-grid {
+            display: grid;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        .grid-5x5 { grid-template-columns: repeat(5, 1fr); }
+        .grid-4x4 { grid-template-columns: repeat(4, 1fr); }
+        
+        .bingo-cell {
+            aspect-ratio: 1;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            font-size: 11px;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s;
+            background: #fff;
+            padding: 2px;
+            position: relative;
+        }
+        .bingo-cell img {
+            width: 70%;
+            height: 70%;
+            object-fit: contain;
+            margin-bottom: 4px;
+            pointer-events: none;
+        }
+        .bingo-cell span {
+            line-height: 1.1;
+            pointer-events: none;
+        }
+        .bingo-cell:hover { border-color: var(--primary); }
+        .bingo-cell.checked {
+            background-color: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .bingo-cell.checked::after {
+            content: '✔';
+            position: absolute;
+            font-size: 40px;
+            color: rgba(40, 167, 69, 0.4);
+            z-index: 1;
+        }
+        .bingo-cell.free-space {
+            background-color: #fff3cd;
+            border-color: #ffc107;
+            font-weight: bold;
+        }
+        .bingo-cell.free-space.checked {
+            background-color: #ffe8a1;
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Multi-Interactive Bingo</h1>
+    <div class="controls">
+        <label>
+            Cards to Generate:
+            <input type="number" id="num-cards" value="2" min="1" max="20" style="width: 60px;">
+        </label>
+        <button onclick="generateLayout()">Create Layout</button>
+        <button onclick="saveToLocal()">Save Progress</button>
+        <button onclick="loadFromLocal()">Load Progress</button>
+        <button onclick="exportJSON()">Export JSON</button>
+        <div class="file-input-wrapper">
+            <button>Import JSON</button>
+            <input type="file" id="import-file" accept=".json" onchange="importJSON(event)">
+        </div>
+    </div>
+</header>
+
+<div id="board-container"></div>
+
+<script>
+    // --- 1. DATA STRUCTURE ---
+    // All categories now have 5 subcategories minimum, plus 2 new categories.
+    const BINGO_DATA = {
+        roadTrip: {
+            name: "Road Trip",
+            subcategories: {
+                auto: { name: "Auto Bingo", size: 5, items: ["Red Car", "Blue Car", "Semi Truck", "Motorcycle", "RV", "Police Car", "Ambulance", "Fire Truck", "School Bus", "Tow Truck", "Jeep", "Convertible", "Taxi", "Delivery Van", "Tractor", "Limo", "Garbage Truck", "Dump Truck", "Camper", "Hearse", "Sports Car", "SUV", "Minivan", "Classic Car", "Hybrid", "EV", "Yellow Car"] },
+                licensePlates: { name: "License Plates", size: 5, items: ["California", "Texas", "Florida", "New York", "Illinois", "Pennsylvania", "Ohio", "Georgia", "North Carolina", "Michigan", "New Jersey", "Virginia", "Washington", "Arizona", "Massachusetts", "Tennessee", "Indiana", "Missouri", "Maryland", "Wisconsin", "Colorado", "Minnesota", "South Carolina", "Alabama", "Louisiana", "Kentucky", "Oregon"] },
+                alphabet: { name: "Alphabet Bingo", size: 4, items: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"] },
+                wildlife: { name: "Nature/Wildlife (Trip)", size: 5, items: ["Deer", "Bald Eagle", "Pine Tree", "Oak Tree", "Hawk", "Coyote", "Fox", "Raccoon", "Opossum", "Squirrel", "Crow", "Vulture", "River", "Lake", "Mountain", "Wildflowers", "Cactus", "Tumbleweed", "Farm Animals", "Horse", "Cow", "Sheep", "Goat", "Windmill", "Barn", "Tractor"] },
+                fastFood: { name: "Fast Food", size: 5, items: ["McDonalds", "Burger King", "Wendys", "Taco Bell", "KFC", "Subway", "Dairy Queen", "Sonic", "Arbys", "Chick-fil-A", "Dominos", "Pizza Hut", "Papa Johns", "Starbucks", "Dunkin", "Panera", "Chipotle", "Panda Express", "Five Guys", "Popeyes", "Jack in the Box", "Hardees", "Carls Jr", "In-N-Out", "Culvers", "Raising Canes"] }
+            }
+        },
+        school: {
+            name: "School",
+            subcategories: {
+                supplies: { name: "Supplies", size: 5, items: ["Pencil", "Pen", "Eraser", "Ruler", "Notebook", "Binder", "Highlighter", "Markers", "Crayons", "Scissors", "Glue Stick", "Calculator", "Backpack", "Lunchbox", "Protractor", "Compass", "Folder", "Paper", "Tape", "Stapler", "Paperclips", "Whiteboard", "Chalk", "Tissues", "Hand Sanitizer"] },
+                subjects: { name: "Subjects", size: 5, items: ["Math", "Science", "History", "English", "PE", "Art", "Music", "Band", "Chorus", "Computer Science", "Biology", "Chemistry", "Physics", "Algebra", "Geometry", "Geography", "Foreign Language", "Drama", "Health", "Economics", "Government", "Psychology", "Sociology", "Creative Writing", "Robotics"] },
+                people: { name: "People", size: 5, items: ["Principal", "Math Teacher", "Science Teacher", "Librarian", "Nurse", "Janitor", "Bus Driver", "Coach", "Counselor", "Secretary", "Security", "Substitute", "Best Friend", "Class Clown", "Hall Monitor", "IT Staff", "Cafeteria Worker", "Peer Tutor", "Valedictorian", "New Student", "Senior", "Junior", "Sophomore", "Freshman", "Alumni"] },
+                locations: { name: "Locations", size: 5, items: ["Gym", "Cafeteria", "Library", "Main Office", "Nurse Office", "Restroom", "Hallway", "Lockers", "Auditorium", "Football Field", "Track", "Courtyard", "Science Lab", "Art Room", "Music Room", "Woodshop", "Computer Lab", "Parking Lot", "Bus Stop", "Stairwell", "Basement", "Teachers Lounge", "Guidance Office", "Trophy Case", "Quad"] },
+                events: { name: "Events", size: 5, items: ["Pep Rally", "Prom", "Homecoming", "Graduation", "Field Trip", "Book Fair", "Science Fair", "Assembly", "Fire Drill", "Lockdown Drill", "PTA Meeting", "Detention", "Recess", "Study Hall", "Finals Week", "Picture Day", "Spirit Week", "Bake Sale", "Talent Show", "Club Meeting", "Tryouts", "Orientation", "Class Party", "Yearbook Signing", "Election"] }
+            }
+        },
+        grocery: {
+            name: "Grocery Store",
+            subcategories: {
+                produce: { name: "Produce", size: 5, items: ["Apple", "Banana", "Orange", "Grapes", "Strawberry", "Blueberry", "Carrot", "Broccoli", "Lettuce", "Tomato", "Potato", "Onion", "Garlic", "Pepper", "Cucumber", "Spinach", "Avocado", "Lemon", "Lime", "Watermelon", "Cantaloupe", "Peach", "Plum", "Pear", "Celery"] },
+                bakery: { name: "Bakery", size: 5, items: ["Bread", "Bagel", "Croissant", "Muffin", "Donut", "Cupcake", "Cake", "Pie", "Cookie", "Brownie", "Tart", "Baguette", "Roll", "Scone", "Biscuit", "Pastry", "Eclair", "Macaron", "Pretzel", "Pita", "Tortilla", "Pizza Crust", "Croutons", "Breadsticks", "Cinnamon Roll"] },
+                dairy: { name: "Dairy & Eggs", size: 5, items: ["Milk", "Eggs", "Butter", "Cheddar", "Mozzarella", "Swiss", "Provolone", "Yogurt", "Cream Cheese", "Sour Cream", "Cottage Cheese", "Heavy Cream", "Ice Cream", "Margarine", "Brie", "Gouda", "Parmesan", "Feta", "Whipping Cream", "Buttermilk", "Almond Milk", "Oat Milk", "Soy Milk", "Goat Cheese", "Ricotta"] },
+                pantry: { name: "Pantry", size: 5, items: ["Cereal", "Soup", "Pasta", "Rice", "Beans", "Canned Tomatoes", "Peanut Butter", "Jelly", "Crackers", "Chips", "Flour", "Sugar", "Baking Soda", "Olive Oil", "Vinegar", "Spices", "Ketchup", "Mustard", "Mayo", "Coffee", "Tea", "Honey", "Syrup", "Oatmeal", "Granola"] },
+                frozen: { name: "Frozen Foods", size: 5, items: ["Frozen Pizza", "Waffles", "Frozen Veggies", "Mixed Berries", "TV Dinners", "Chicken Nuggets", "French Fries", "Fish Sticks", "Burritos", "Meatballs", "Frozen Pie", "Popsicles", "Edamame", "Hash Browns", "Burgers", "Garlic Bread", "Dumplings", "Taquitos", "Frozen Yogurt", "Sorbet", "Smoothie Mix", "Tater Tots", "Shrimp", "Ice Sandwiches", "Corn Dogs"] }
+            }
+        },
+        sports: {
+            name: "Sports Event",
+            subcategories: {
+                actions: { name: "In-Game Actions", size: 5, items: ["Foul", "Timeout", "Home Run", "Touchdown", "Goal", "Penalty", "Substitution", "Replay", "Yellow Card", "Red Card", "Free Throw", "Corner Kick", "Strikeout", "Walk", "Interception", "Fumble", "Sack", "Dunk", "Three-Pointer", "Offsides", "Icing", "Power Play", "Ace", "Fault", "Check"] },
+                fans: { name: "Crowd/Fans", size: 5, items: ["Face Paint", "Foam Finger", "Holding Sign", "Spilled Drink", "Catching Ball", "Sleeping", "On Phone", "Kiss Cam", "Dancing", "Booing", "Cheering", "Eating Hot Dog", "Wearing Jersey", "Wave", "Mascot Interaction", "Security", "Crying Baby", "Facepalm", "High Five", "Selfie", "Painted Chest", "Flag Waving", "Drummer", "Chanting", "Vuvuzela"] },
+                equipment: { name: "Equipment", size: 5, items: ["Ball", "Bat", "Helmet", "Glove", "Cleats", "Net", "Whistle", "Scoreboard", "Towel", "Water Bottle", "Clipboard", "Pads", "Mouthguard", "Goggles", "Racket", "Stick", "Puck", "Skates", "Bases", "Tees", "Cones", "Stopwatch", "Megaphone", "Uniform", "Medal"] },
+                venues: { name: "Venues", size: 5, items: ["Stadium", "Arena", "Field", "Court", "Track", "Pitch", "Pool", "Ring", "Rink", "Golf Course", "Diamond", "Gymnasium", "Dome", "Velodrome", "Dojo", "Bowling Alley", "Skatepark", "Natatorium", "Colosseum", "Grandstand", "Bleachers", "Dugout", "Bullpen", "Locker Room", "Press Box"] },
+                snacks: { name: "Snacks", size: 5, items: ["Hot Dog", "Nachos", "Popcorn", "Peanuts", "Cracker Jack", "Cotton Candy", "Soft Pretzel", "Beer", "Soda", "Water", "Ice Cream Helmet", "Sunflower Seeds", "Churro", "Burger", "Fries", "Pizza Slice", "Bratwurst", "Lemonade", "Candy", "Sausage", "Funnel Cake", "Cheese Curds", "Corn Dog", "Dippin Dots", "Chips"] }
+            }
+        },
+        movies: {
+            name: "Movie Tropes",
+            subcategories: {
+                action: { name: "Action", size: 5, items: ["Explosion", "Car Chase", "Gunfight", "Martial Arts", "Helicopter", "Jumping thru Window", "One-Liner", "Ticking Bomb", "Hacking", "Evil Monologue", "Henchmen", "Boss Fight", "Walking from Explosion", "Rooftop Chase", "Motorcycle", "Gadget", "Betrayal", "Sniper", "Disguise", "Dangling from Ledge", "Train Fight", "Hostage", "Laser Grid", "Escape Pod", "Slow Motion"] },
+                horror: { name: "Horror", size: 5, items: ["Jump Scare", "Creepy Doll", "Flickering Lights", "Phone Dead", "Car Wont Start", "Running Upstairs", "Tripping", "Mirror Scare", "Basement", "Attic", "Ouija Board", "Possession", "Creepy Kid", "Blood", "Chainsaw", "Masked Killer", "Isolated Cabin", "Storm", "No Signal", "Splitting Up", "Crying", "Hiding in Closet", "Under Bed", "Fake Out", "Final Girl"] },
+                romcom: { name: "Rom-Com", size: 5, items: ["Meet Cute", "Misunderstanding", "Running to Airport", "Makeover", "Best Friend Advice", "Rain Kiss", "Fake Dating", "Enemies to Lovers", "Wedding Crasher", "Spilled Coffee", "Karaoke", "Grand Gesture", "Quirky Job", "Terrible Ex", "Overbearing Parents", "Snowstorm", "Elevator Stuck", "Love Letter", "Secret Identity", "Gala Event", "Bumping into each other", "Awkward Silence", "Shared Umbrella", "Tripping/Catching", "Montage"] },
+                scifi: { name: "Sci-Fi", size: 5, items: ["Aliens", "Spaceship", "Laser", "Time Travel", "Robot", "Cyborg", "Hologram", "Wormhole", "Mutants", "Post-Apocalyptic", "Dystopia", "Clone", "Artificial Intelligence", "Warp Speed", "Hypersleep", "Force Field", "Blaster", "Hoverboard", "Teleportation", "Mind Control", "Multiverse", "Superpowers", "Giant Monster", "Jetpack", "Ray Gun"] },
+                comedy: { name: "Comedy", size: 5, items: ["Slapstick", "Prank", "Embarrassment", "Crazy Costume", "Funny Walk", "Spit Take", "Catchphrase", "Training Montage", "Parody", "Spoof", "Stand-up", "Wacky Neighbor", "Crazy Road Trip", "Hangover", "Breaking 4th Wall", "Gross Out", "Wordplay", "Insult", "Sarcasm", "Physical Comedy", "Satire", "Irony", "Deadpan", "Gag", "Dance Battle"] }
+            }
+        },
+        gaming: {
+            name: "Video Games",
+            subcategories: {
+                rpg: { name: "RPG Tropes", size: 5, items: ["Tavern", "Amnesia", "Chosen One", "Fetch Quest", "Dragon", "Magic Sword", "Hidden Chest", "Overencumbered", "Level Up", "Boss Form 2", "Escort Mission", "Betrayal", "Save Point", "Dialogue Tree", "Potions", "Skill Tree", "Fast Travel", "Minigame", "Crafting", "Lore Book", "Ghost", "Bandit Camp", "Puzzle Door", "Lockpicking", "Summon"] },
+                fps: { name: "FPS Elements", size: 5, items: ["Sniper", "Shotgun", "Grenade", "Reload Animation", "Headshot", "Respawn", "Campers", "Loot Box", "Health Pack", "Armor", "Killstreak", "Melee", "Rocket Launcher", "Capture Flag", "Payload", "Skins", "Emote", "Ping", "Lag", "Teabagging", "Flashbang", "Silencer", "Airstrike", "Turret", "Glitch"] },
+                platformer: { name: "Platformer", size: 5, items: ["Double Jump", "Spikes", "Moving Platform", "Collectibles", "Extra Life", "Checkpoint", "Lava", "Ice Level", "Water Level", "Boss Key", "Time Limit", "Springboard", "Dash", "Wall Jump", "Stomp", "Invincibility", "Conveyor Belt", "Falling Blocks", "Warp Pipe", "Secret Room", "Coin", "Mushroom", "Star", "Jetpack", "Grappling Hook"] },
+                hardware: { name: "Hardware/Gear", size: 5, items: ["Controller", "Keyboard", "Mouse", "Monitor", "Headset", "Console", "PC", "GPU", "CPU", "RAM", "SSD", "Motherboard", "Power Supply", "Case", "Gaming Chair", "Mousepad", "Webcam", "Microphone", "VR Headset", "Handheld", "Arcade Cabinet", "Joy-Con", "Fight Stick", "Steering Wheel", "Cables"] },
+                characters: { name: "Archetypes", size: 5, items: ["Hero", "Sidekick", "Villain", "Healer", "Tank", "Mage", "Rogue", "NPC", "Merchant", "Quest Giver", "Final Boss", "Mini Boss", "Princess", "Silent Protagonist", "Rival", "Mentor", "Animal Companion", "Zombie", "Goblin", "Dragon", "Space Marine", "Ninja", "Pirate", "Assassin", "Mercenary"] }
+            }
+        },
+        nature: {
+            name: "Nature/Wildlife",
+            subcategories: {
+                mammals: { name: "Mammals", size: 5, items: ["Bear", "Wolf", "Lion", "Tiger", "Elephant", "Giraffe", "Zebra", "Hippo", "Rhino", "Kangaroo", "Monkey", "Gorilla", "Whale", "Dolphin", "Seal", "Bat", "Rabbit", "Squirrel", "Deer", "Moose", "Fox", "Raccoon", "Skunk", "Badger", "Beaver"] },
+                birds: { name: "Birds", size: 5, items: ["Eagle", "Hawk", "Owl", "Penguin", "Ostrich", "Flamingo", "Parrot", "Peacock", "Swan", "Duck", "Goose", "Seagull", "Pigeon", "Crow", "Raven", "Woodpecker", "Hummingbird", "Pelican", "Toucan", "Cardinal", "Blue Jay", "Robin", "Sparrow", "Falcon", "Vulture"] },
+                insects: { name: "Bugs & Insects", size: 5, items: ["Butterfly", "Bee", "Ant", "Spider", "Beetle", "Ladybug", "Grasshopper", "Cricket", "Mantis", "Dragonfly", "Fly", "Mosquito", "Moth", "Wasp", "Hornet", "Caterpillar", "Centipede", "Millipede", "Snail", "Worm", "Tick", "Flea", "Roach", "Cicada", "Firefly"] },
+                plants: { name: "Plants & Trees", size: 5, items: ["Oak Tree", "Pine Tree", "Maple", "Birch", "Willow", "Palm Tree", "Cactus", "Fern", "Moss", "Mushroom", "Rose", "Tulip", "Sunflower", "Daisy", "Lily", "Orchid", "Bamboo", "Grass", "Bush", "Vine", "Seaweed", "Kelp", "Ivy", "Shrub", "Algae"] },
+                weather: { name: "Weather & Sky", size: 5, items: ["Sun", "Rain", "Cloud", "Snow", "Wind", "Storm", "Lightning", "Thunder", "Rainbow", "Fog", "Hail", "Tornado", "Hurricane", "Blizzard", "Frost", "Dew", "Humidity", "Overcast", "Drizzle", "Sleet", "Monsoon", "Cyclone", "Typhoon", "Heatwave", "Cold Front"] }
+            }
+        },
+        home: {
+            name: "At Home",
+            subcategories: {
+                furniture: { name: "Furniture", size: 5, items: ["Sofa", "Chair", "Table", "Bed", "Desk", "Dresser", "Wardrobe", "Bookshelf", "Cabinet", "Stool", "Bench", "Ottoman", "Recliner", "Futon", "Crib", "Hammock", "Shelf", "Nightstand", "Coffee Table", "Dining Table", "Vanity", "Mattress", "Rug", "Lamp", "Mirror"] },
+                appliances: { name: "Appliances", size: 5, items: ["Refrigerator", "Oven", "Microwave", "Dishwasher", "Washer", "Dryer", "Toaster", "Blender", "Coffee Maker", "Vacuum", "Iron", "Hair Dryer", "Fan", "Heater", "Air Conditioner", "TV", "Radio", "Computer", "Router", "Printer", "Clock", "Scale", "Mixer", "Slow Cooker", "Air Fryer"] },
+                rooms: { name: "Rooms", size: 5, items: ["Kitchen", "Bathroom", "Bedroom", "Living Room", "Dining Room", "Office", "Garage", "Basement", "Attic", "Hallway", "Closet", "Pantry", "Laundry Room", "Sunroom", "Patio", "Deck", "Porch", "Balcony", "Entryway", "Nursery", "Guest Room", "Playroom", "Gym", "Theater", "Mudroom"] },
+                chores: { name: "Chores", size: 5, items: ["Dishes", "Vacuuming", "Dusting", "Laundry", "Mopping", "Sweeping", "Take Out Trash", "Recycling", "Wash Windows", "Cooking", "Baking", "Ironing", "Make Bed", "Tidy Up", "Groceries", "Pay Bills", "Feed Pet", "Walk Pet", "Clean Bathroom", "Clean Kitchen", "Mow Lawn", "Weed Garden", "Water Plants", "Shovel Snow", "Rake Leaves"] },
+                yardPets: { name: "Yard & Pets", size: 5, items: ["Dog", "Cat", "Fish", "Bird", "Hamster", "Guinea Pig", "Rabbit", "Snake", "Turtle", "Lizard", "Lawn", "Tree", "Flower", "Garden", "Fence", "Gate", "Hose", "Sprinkler", "Shed", "Pool", "Grill", "Patio Furniture", "Birdhouse", "Mailbox", "Driveway"] }
+            }
+        }
+    };
+
+    // --- 2. STATE MANAGEMENT ---
+    let appState = [];
+
+    // --- 3. UTILITY: Generate reliable SVG data URI for images ---
+    function generateSVGPlaceholder(text) {
+        // Grab just the first word/few characters to fit nicely in the placeholder box
+        const shortText = text.split(' ')[0].substring(0, 10); 
+        const svg = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
+                <rect width="80" height="80" fill="#eeeeee"/>
+                <text x="40" y="45" font-family="sans-serif" font-weight="bold" font-size="12" fill="#555555" text-anchor="middle">${shortText}</text>
+            </svg>
+        `;
+        // Encode to base64 to ensure it loads flawlessly across all devices and browsers without external APIs
+        return `data:image/svg+xml;base64,${btoa(svg)}`;
+    }
+
+    // --- 4. CORE FUNCTIONS ---
+    
+    // Generate the initial grid of empty cards
+    function generateLayout() {
+        const numCards = parseInt(document.getElementById('num-cards').value);
+        if (numCards < 1 || numCards > 50) return alert("Please choose between 1 and 50 cards.");
+        
+        appState = [];
+        for (let i = 0; i < numCards; i++) {
+            appState.push({
+                id: generateId(),
+                title: `Player ${i + 1}`,
+                category: "roadTrip",
+                subcategory: "auto",
+                grid: [],
+                progressCount: 0
+            });
+        }
+        
+        appState.forEach(card => populateCardGrid(card));
+        renderApp();
+    }
+
+    // Populate a specific card's grid based on its cat/subcat
+    function populateCardGrid(card) {
+        const subData = BINGO_DATA[card.category].subcategories[card.subcategory];
+        const size = subData.size;
+        const totalSlots = size * size;
+        
+        let shuffledItems = [...subData.items].sort(() => 0.5 - Math.random());
+        
+        let grid = [];
+        let itemIndex = 0;
+        
+        for (let i = 0; i < totalSlots; i++) {
+            const isFreeSpace = (size % 2 !== 0) && (i === Math.floor(totalSlots / 2));
+            
+            if (isFreeSpace) {
+                grid.push({ text: "FREE", img: "", checked: true, isFreeSpace: true });
+            } else {
+                let itemName = shuffledItems[itemIndex] || `Item ${itemIndex}`;
+                // Now using the completely reliable built-in SVG generator
+                let imgUrl = generateSVGPlaceholder(itemName);
+                
+                grid.push({
+                    text: itemName,
+                    img: imgUrl,
+                    checked: false,
+                    isFreeSpace: false
+                });
+                itemIndex++;
+            }
+        }
+        card.grid = grid;
+        card.progressCount = 0;
+    }
+
+    // Toggle cell check state
+    function toggleCell(cardId, cellIndex) {
+        const card = appState.find(c => c.id === cardId);
+        if (!card) return;
+        
+        const cell = card.grid[cellIndex];
+        if (cell.isFreeSpace) return; 
+        
+        cell.checked = !cell.checked;
+        
+        // Update progress
+        card.progressCount = card.grid.filter(c => c.checked && !c.isFreeSpace).length;
+        renderApp(); 
+    }
+
+    // Individual Regenerate
+    function regenerateCard(cardId) {
+        const card = appState.find(c => c.id === cardId);
+        if (card.progressCount > 0) return alert("Please clear progress first using the 'Clear' button.");
+        populateCardGrid(card);
+        renderApp();
+    }
+
+    // Clear Progress from an individual card
+    function clearCard(cardId) {
+        const card = appState.find(c => c.id === cardId);
+        if (!card) return;
+        
+        card.grid.forEach(cell => {
+            if (!cell.isFreeSpace) cell.checked = false;
+        });
+        card.progressCount = 0;
+        renderApp();
+    }
+
+    // Update Category/Subcategory Dropdowns
+    function updateCardCategory(cardId, newCategory) {
+        const card = appState.find(c => c.id === cardId);
+        card.category = newCategory;
+        card.subcategory = Object.keys(BINGO_DATA[newCategory].subcategories)[0];
+        
+        if (card.progressCount === 0) populateCardGrid(card);
+        renderApp();
+    }
+
+    function updateCardSubcategory(cardId, newSubcategory) {
+        const card = appState.find(c => c.id === cardId);
+        card.subcategory = newSubcategory;
+        
+        if (card.progressCount === 0) populateCardGrid(card);
+        renderApp();
+    }
+    
+    function updateCardTitle(cardId, newTitle) {
+        const card = appState.find(c => c.id === cardId);
+        if (card) card.title = newTitle;
+    }
+
+    // --- 5. RENDER LOGIC ---
+    function renderApp() {
+        const container = document.getElementById('board-container');
+        container.innerHTML = '';
+        
+        appState.forEach((card) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'bingo-card-wrapper';
+            
+            let catOptions = '';
+            for (const [catKey, catVal] of Object.entries(BINGO_DATA)) {
+                catOptions += `<option value="${catKey}" ${card.category === catKey ? 'selected' : ''}>${catVal.name}</option>`;
+            }
+            
+            let subOptions = '';
+            const activeSubcategories = BINGO_DATA[card.category].subcategories;
+            for (const [subKey, subVal] of Object.entries(activeSubcategories)) {
+                subOptions += `<option value="${subKey}" ${card.subcategory === subKey ? 'selected' : ''}>${subVal.name}</option>`;
+            }
+
+            const size = activeSubcategories[card.subcategory].size;
+            const gridClass = size === 4 ? 'grid-4x4' : 'grid-5x5';
+            
+            wrapper.innerHTML = `
+                <div class="card-header">
+                    <input type="text" class="card-title" value="${card.title}" onchange="updateCardTitle('${card.id}', this.value)">
+                    <div class="header-buttons">
+                        <button onclick="clearCard('${card.id}')" title="Clear all marks">🧹 Clear</button>
+                        <button onclick="regenerateCard('${card.id}')" ${card.progressCount > 0 ? 'disabled' : ''} title="Can only regenerate if no progress">🔄 Regen</button>
+                    </div>
+                </div>
+                <div class="card-settings">
+                    <select onchange="updateCardCategory('${card.id}', this.value)">${catOptions}</select>
+                    <select onchange="updateCardSubcategory('${card.id}', this.value)">${subOptions}</select>
+                </div>
+                <div class="bingo-grid ${gridClass}">
+                    ${card.grid.map((cell, index) => `
+                        <div class="bingo-cell ${cell.isFreeSpace ? 'free-space' : ''} ${cell.checked ? 'checked' : ''}" 
+                             onclick="toggleCell('${card.id}', ${index})">
+                            ${cell.img && !cell.isFreeSpace ? `<img src="${cell.img}" alt="${cell.text}">` : ''}
+                            <span>${cell.text}</span>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+            container.appendChild(wrapper);
+        });
+    }
+
+    // --- 6. UTILITIES & STORAGE ---
+    function generateId() {
+        return Math.random().toString(36).substr(2, 9);
+    }
+
+    function saveToLocal() {
+        localStorage.setItem('bingoDataSave', JSON.stringify(appState));
+        alert('Progress saved to local device!');
+    }
+
+    function loadFromLocal() {
+        const saved = localStorage.getItem('bingoDataSave');
+        if (saved) {
+            appState = JSON.parse(saved);
+            renderApp();
+            alert('Progress loaded!');
+        } else {
+            alert('No saved data found.');
+        }
+    }
+
+    function exportJSON() {
+        if (appState.length === 0) return alert("Nothing to export!");
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appState));
+        const downloadAnchorNode = document.createElement('a');
+        downloadAnchorNode.setAttribute("href", dataStr);
+        downloadAnchorNode.setAttribute("download", "bingo_save.json");
+        document.body.appendChild(downloadAnchorNode);
+        downloadAnchorNode.click();
+        downloadAnchorNode.remove();
+    }
+
+    function importJSON(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (Array.isArray(imported)) {
+                    appState = imported;
+                    renderApp();
+                    alert("JSON imported successfully!");
+                }
+            } catch (err) {
+                alert("Invalid JSON file.");
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    // Initialize with a blank state
+    window.onload = () => {
+        if(!localStorage.getItem('bingoDataSave')) {
+            generateLayout(); 
+        } else {
+            loadFromLocal();
+        }
+    };
+</script>
+
+</body>
+</html>
