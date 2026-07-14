@@ -135,18 +135,25 @@
             background: #fff;
             padding: 2px;
             position: relative;
+            overflow: hidden;
         }
         .bingo-cell img {
-            width: 65%;
-            height: 65%;
-            object-fit: contain;
-            margin-bottom: 6px;
-            border-radius: 6px;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0;
+            left: 0;
+            object-fit: cover;
+            opacity: 0.4; /* Faded so text is readable */
             pointer-events: none;
+            z-index: 0;
         }
         .bingo-cell span {
             line-height: 1.1;
             pointer-events: none;
+            z-index: 1;
+            font-weight: 600;
+            text-shadow: 0px 0px 4px white, 0px 0px 4px white; /* Helps text stand out against photos */
         }
         .bingo-cell:hover { border-color: var(--primary); }
         .bingo-cell.checked {
@@ -154,12 +161,15 @@
             border-color: #28a745;
             color: #155724;
         }
+        .bingo-cell.checked img {
+            opacity: 0.15;
+        }
         .bingo-cell.checked::after {
             content: '✔';
             position: absolute;
             font-size: 40px;
-            color: rgba(40, 167, 69, 0.4);
-            z-index: 1;
+            color: rgba(40, 167, 69, 0.7);
+            z-index: 2;
         }
         .bingo-cell.free-space {
             background-color: #fff3cd;
@@ -278,42 +288,18 @@
         }
     };
 
-    // --- 2. STATE MANAGEMENT ---
     let appState = [];
 
-    // --- 3. IMAGE GENERATOR (HOW TO ADD YOUR REAL PHOTOS) ---
+    // --- 3. LIVE PHOTO DATABASE CONNECTION ---
     function getImageUrl(itemName) {
-        /*
-        ====================================================================
-        ATTENTION: READ THIS TO GET REAL IMAGES IN YOUR GAME
-        ====================================================================
-        Right now, this function is pointing to "placehold.co", which generates
-        a colorful green square with text so your GitHub site doesn't show 
-        broken image errors.
-
-        TO USE REAL PICTURES:
-        1. Create a folder named "images" in your GitHub repository.
-        2. Upload pictures matching the exact names of your items, but with dashes instead of spaces. 
-           (Example: name your picture "red-car.png" or "school-bus.png").
-        3. Delete the 'const url = ...' line below, and uncomment the local path line!
-        ====================================================================
-        */
-
-        // Create a safe string for URLs (e.g., "School Bus" -> "School+Bus")
-        const urlSafeName = encodeURIComponent(itemName.split(' ').slice(0, 2).join('+'));
+        // Convert the item name into a search tag (e.g., "School Bus" -> "school,bus")
+        const searchTags = encodeURIComponent(itemName.toLowerCase().replace(/ /g, ','));
         
-        // This generates the colorful placeholder image. 
-        const url = `https://placehold.co/100x100/4CAF50/FFFFFF/png?text=${urlSafeName}`;
-
-        // WHEN YOU ARE READY FOR REAL IMAGES, DELETE THE LINE ABOVE AND UNCOMMENT THE LINE BELOW:
-        // const url = `images/${itemName.toLowerCase().replace(/ /g, '-')}.png`;
-
-        return url;
+        // Fetch a real photograph from LoremFlickr based on the tag! 
+        return `https://loremflickr.com/120/120/${searchTags}`;
     }
 
     // --- 4. CORE FUNCTIONS ---
-    
-    // Generate the initial grid of empty cards
     function generateLayout() {
         const numCards = parseInt(document.getElementById('num-cards').value);
         if (numCards < 1 || numCards > 50) return alert("Please choose between 1 and 50 cards.");
@@ -334,7 +320,6 @@
         renderApp();
     }
 
-    // Populate a specific card's grid based on its cat/subcat
     function populateCardGrid(card) {
         const subData = BINGO_DATA[card.category].subcategories[card.subcategory];
         const size = subData.size;
@@ -366,7 +351,6 @@
         card.progressCount = 0;
     }
 
-    // Toggle cell check state
     function toggleCell(cardId, cellIndex) {
         const card = appState.find(c => c.id === cardId);
         if (!card) return;
@@ -376,12 +360,10 @@
         
         cell.checked = !cell.checked;
         
-        // Update progress
         card.progressCount = card.grid.filter(c => c.checked && !c.isFreeSpace).length;
         renderApp(); 
     }
 
-    // Individual Regenerate
     function regenerateCard(cardId) {
         const card = appState.find(c => c.id === cardId);
         if (card.progressCount > 0) return alert("Please clear progress first using the 'Clear' button.");
@@ -389,7 +371,6 @@
         renderApp();
     }
 
-    // Clear Progress from an individual card
     function clearCard(cardId) {
         const card = appState.find(c => c.id === cardId);
         if (!card) return;
@@ -401,7 +382,6 @@
         renderApp();
     }
 
-    // Update Category/Subcategory Dropdowns
     function updateCardCategory(cardId, newCategory) {
         const card = appState.find(c => c.id === cardId);
         card.category = newCategory;
