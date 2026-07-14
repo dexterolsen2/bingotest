@@ -137,10 +137,11 @@
             position: relative;
         }
         .bingo-cell img {
-            width: 70%;
-            height: 70%;
+            width: 65%;
+            height: 65%;
             object-fit: contain;
-            margin-bottom: 4px;
+            margin-bottom: 6px;
+            border-radius: 6px;
             pointer-events: none;
         }
         .bingo-cell span {
@@ -193,7 +194,7 @@
 <div id="board-container"></div>
 
 <script>
-    // --- 1. DATA STRUCTURE ---
+    // --- 1. DATA STRUCTURE (8 Categories, 5 Subcategories each) ---
     const BINGO_DATA = {
         roadTrip: {
             name: "Road Trip",
@@ -201,7 +202,7 @@
                 auto: { name: "Auto Bingo", size: 5, items: ["Red Car", "Blue Car", "Semi Truck", "Motorcycle", "RV", "Police Car", "Ambulance", "Fire Truck", "School Bus", "Tow Truck", "Jeep", "Convertible", "Taxi", "Delivery Van", "Tractor", "Limo", "Garbage Truck", "Dump Truck", "Camper", "Hearse", "Sports Car", "SUV", "Minivan", "Classic Car", "Hybrid", "EV", "Yellow Car"] },
                 licensePlates: { name: "License Plates", size: 5, items: ["California", "Texas", "Florida", "New York", "Illinois", "Pennsylvania", "Ohio", "Georgia", "North Carolina", "Michigan", "New Jersey", "Virginia", "Washington", "Arizona", "Massachusetts", "Tennessee", "Indiana", "Missouri", "Maryland", "Wisconsin", "Colorado", "Minnesota", "South Carolina", "Alabama", "Louisiana", "Kentucky", "Oregon"] },
                 alphabet: { name: "Alphabet Bingo", size: 4, items: ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"] },
-                wildlife: { name: "Nature/Wildlife (Trip)", size: 5, items: ["Deer", "Bald Eagle", "Pine Tree", "Oak Tree", "Hawk", "Coyote", "Fox", "Raccoon", "Opossum", "Squirrel", "Crow", "Vulture", "River", "Lake", "Mountain", "Wildflowers", "Cactus", "Tumbleweed", "Farm Animals", "Horse", "Cow", "Sheep", "Goat", "Windmill", "Barn", "Tractor"] },
+                wildlife: { name: "Nature (Trip)", size: 5, items: ["Deer", "Bald Eagle", "Pine Tree", "Oak Tree", "Hawk", "Coyote", "Fox", "Raccoon", "Opossum", "Squirrel", "Crow", "Vulture", "River", "Lake", "Mountain", "Wildflowers", "Cactus", "Tumbleweed", "Farm Animals", "Horse", "Cow", "Sheep", "Goat", "Windmill", "Barn", "Tractor"] },
                 fastFood: { name: "Fast Food", size: 5, items: ["McDonalds", "Burger King", "Wendys", "Taco Bell", "KFC", "Subway", "Dairy Queen", "Sonic", "Arbys", "Chick-fil-A", "Dominos", "Pizza Hut", "Papa Johns", "Starbucks", "Dunkin", "Panera", "Chipotle", "Panda Express", "Five Guys", "Popeyes", "Jack in the Box", "Hardees", "Carls Jr", "In-N-Out", "Culvers", "Raising Canes"] }
             }
         },
@@ -280,23 +281,34 @@
     // --- 2. STATE MANAGEMENT ---
     let appState = [];
 
-    // --- 3. UTILITY: Generate 100% Reliable URL-Encoded SVG Placeholder ---
-    function generateSVGPlaceholder(text) {
-        // Split text nicely so it fits inside the image box
-        const words = text.split(' ');
-        const line1 = words[0] || '';
-        const line2 = words.slice(1).join(' ').substring(0, 12);
+    // --- 3. IMAGE GENERATOR (HOW TO ADD YOUR REAL PHOTOS) ---
+    function getImageUrl(itemName) {
+        /*
+        ====================================================================
+        ATTENTION: READ THIS TO GET REAL IMAGES IN YOUR GAME
+        ====================================================================
+        Right now, this function is pointing to "placehold.co", which generates
+        a colorful green square with text so your GitHub site doesn't show 
+        broken image errors.
+
+        TO USE REAL PICTURES:
+        1. Create a folder named "images" in your GitHub repository.
+        2. Upload pictures matching the exact names of your items, but with dashes instead of spaces. 
+           (Example: name your picture "red-car.png" or "school-bus.png").
+        3. Delete the 'const url = ...' line below, and uncomment the local path line!
+        ====================================================================
+        */
+
+        // Create a safe string for URLs (e.g., "School Bus" -> "School+Bus")
+        const urlSafeName = encodeURIComponent(itemName.split(' ').slice(0, 2).join('+'));
         
-        // This is a direct XML string that acts as an image. It cannot be blocked by GitHub Pages CSP.
-        const svg = `
-            <svg xmlns="http://www.w3.org/2000/svg" width="80" height="80" viewBox="0 0 80 80">
-                <rect width="80" height="80" fill="#e9ecef" rx="8"/>
-                <text x="50%" y="45%" font-family="Arial, sans-serif" font-weight="bold" font-size="12" fill="#495057" text-anchor="middle" dominant-baseline="middle">${line1}</text>
-                <text x="50%" y="65%" font-family="Arial, sans-serif" font-weight="normal" font-size="10" fill="#6c757d" text-anchor="middle" dominant-baseline="middle">${line2}</text>
-            </svg>
-        `;
-        // encodeURIComponent is the secret sauce here to prevent base64 crashes
-        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+        // This generates the colorful placeholder image. 
+        const url = `https://placehold.co/100x100/4CAF50/FFFFFF/png?text=${urlSafeName}`;
+
+        // WHEN YOU ARE READY FOR REAL IMAGES, DELETE THE LINE ABOVE AND UNCOMMENT THE LINE BELOW:
+        // const url = `images/${itemName.toLowerCase().replace(/ /g, '-')}.png`;
+
+        return url;
     }
 
     // --- 4. CORE FUNCTIONS ---
@@ -340,11 +352,10 @@
                 grid.push({ text: "FREE", img: "", checked: true, isFreeSpace: true });
             } else {
                 let itemName = shuffledItems[itemIndex] || `Item ${itemIndex}`;
-                let imgUrl = generateSVGPlaceholder(itemName);
                 
                 grid.push({
                     text: itemName,
-                    img: imgUrl,
+                    img: getImageUrl(itemName), 
                     checked: false,
                     isFreeSpace: false
                 });
@@ -452,7 +463,7 @@
                     ${card.grid.map((cell, index) => `
                         <div class="bingo-cell ${cell.isFreeSpace ? 'free-space' : ''} ${cell.checked ? 'checked' : ''}" 
                              onclick="toggleCell('${card.id}', ${index})">
-                            ${cell.img && !cell.isFreeSpace ? `<img src="${cell.img}" alt="${cell.text}">` : ''}
+                            ${cell.img && !cell.isFreeSpace ? `<img src="${cell.img}" alt="${cell.text}" loading="lazy">` : ''}
                             <span>${cell.text}</span>
                         </div>
                     `).join('')}
@@ -513,7 +524,6 @@
         reader.readAsText(file);
     }
 
-    // Initialize with a blank state
     window.onload = () => {
         if(!localStorage.getItem('bingoDataSave')) {
             generateLayout(); 
